@@ -8,3 +8,4 @@ from . import casio
 from . import fujifilm
 from . import nikon
 from . import olympus
+from . import flir
