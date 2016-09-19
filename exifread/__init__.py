@@ -26,6 +26,7 @@ def process_file(f, stop_tag=DEFAULT_STOP_TAG, details=True, strict=False, debug
 
     # by default do not fake an EXIF beginning
     fake_exif = 0
+    flirbases = []
 
     # determine whether it's a JPEG or TIFF
     data = f.read(12)
@@ -64,7 +65,7 @@ def process_file(f, stop_tag=DEFAULT_STOP_TAG, details=True, strict=False, debug
         #data = f.read(base + 64000)
         data = f.read()
         # base = 2
-        flirbases = []
+        
         while 1:
             logger.debug(" Segment base 0x%X", base)
             if data[base:base + 2] == b'\xFF\xE1':
@@ -81,9 +82,13 @@ def process_file(f, stop_tag=DEFAULT_STOP_TAG, details=True, strict=False, debug
                 if data[base + 4:base + 8] == b"FLIR":
                     logger.debug("  A FLIR Header is here")
                     #this should actually be FLIRFFF. The other tables will be pointed by it.
-                    logger.debug("  content: %s ", data[base + 4:base + 8]+data[base + 12:base + 15])
+                    flir_header_name="".join(map(chr,data[base + 4:base + 8]+data[base + 12:base + 15]))
                     flirlength = ord_(data[base + 2])*256+ord_(data[base + 3])
-                    flirbases.append((base+4, flirlength))
+                    logger.debug("  content: %s ", data[base + 4:base + 8])
+                    if(flir_header_name  == 'FLIRFFF'):
+                        flirbases.insert(0,(base+4, flirlength))
+                    else:
+                        flirbases.append((base+4, flirlength))
                 increment = increment_base(data, base)
                 logger.debug(" Increment base by %s", increment)
                 base += increment
@@ -160,8 +165,6 @@ def process_file(f, stop_tag=DEFAULT_STOP_TAG, details=True, strict=False, debug
                     logger.debug("  Increment base by %s", increment)
                     base += increment
           
-        logger.debug("Flir headers if available are printed below:")
-        logger.debug(flirbases)
         f.seek(exifbase + 12)
         if ord_(data[2 + exifbase]) == 0xFF and data[6 + exifbase:10 + exifbase] == b'Exif':
             # detected EXIF header
@@ -199,6 +202,20 @@ def process_file(f, stop_tag=DEFAULT_STOP_TAG, details=True, strict=False, debug
         '\x01': 'Adobe Ducky',
         'd': 'XMP/Adobe unknown'
     }[endian])
+    
+    if(len(flirbases)>0):
+        logger.debug("Flir headers if available are printed below:")
+        logger.debug(flirbases)
+        flir_base = flirbases[0][0]
+        f.seek(flir_base +10)
+        flir_offset = f.tell()
+        flir_endian = f.read(1)
+        logger.debug("Offset= %d; Endian= %s",flir_offset, flir_endian)
+        flrhdr = ExifHeader(f, flir_endian, flir_offset, fake_exif, strict, debug, details, truncate_tags)
+        flir_ifd_list = flrhdr.list_ifd()
+        logger.debug(flir_ifd_list)
+        for ifd in flir_ifd_list:
+            logger.debug('IFD at offset %s:', ifd)
 
     hdr = ExifHeader(f, endian, offset, fake_exif, strict, debug, details, truncate_tags)
     ifd_list = hdr.list_ifd()
