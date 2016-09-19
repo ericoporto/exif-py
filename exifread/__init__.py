@@ -61,8 +61,10 @@ def process_file(f, stop_tag=DEFAULT_STOP_TAG, details=True, strict=False, debug
         # Big ugly patch to deal with APP2 (or other) data coming before APP1
         f.seek(0)
         # in theory, this could be insufficient since 64K is the maximum size--gd
-        data = f.read(base + 4000)
+        #data = f.read(base + 64000)
+        data = f.read()
         # base = 2
+        flirbases = []
         while 1:
             logger.debug(" Segment base 0x%X", base)
             if data[base:base + 2] == b'\xFF\xE1':
@@ -73,8 +75,15 @@ def process_file(f, stop_tag=DEFAULT_STOP_TAG, details=True, strict=False, debug
                 logger.debug("  Code: %s", data[base + 4:base + 8])
                 if data[base + 4:base + 8] == b"Exif":
                     logger.debug("  Decrement base by 2 to get to pre-segment header (for compatibility with later code)")
-                    base -= 2
-                    break
+                    #base -= 2
+                    exifbase = base-2
+                    #break
+                if data[base + 4:base + 8] == b"FLIR":
+                    logger.debug("  A FLIR Header is here")
+                    #this should actually be FLIRFFF. The other tables will be pointed by it.
+                    logger.debug("  content: %s ", data[base + 4:base + 8]+data[base + 12:base + 15])
+                    flirlength = ord_(data[base + 2])*256+ord_(data[base + 3])
+                    flirbases.append((base+4, flirlength))
                 increment = increment_base(data, base)
                 logger.debug(" Increment base by %s", increment)
                 base += increment
@@ -150,8 +159,11 @@ def process_file(f, stop_tag=DEFAULT_STOP_TAG, details=True, strict=False, debug
                 else:
                     logger.debug("  Increment base by %s", increment)
                     base += increment
-        f.seek(base + 12)
-        if ord_(data[2 + base]) == 0xFF and data[6 + base:10 + base] == b'Exif':
+          
+        logger.debug("Flir headers if available are printed below:")
+        logger.debug(flirbases)
+        f.seek(exifbase + 12)
+        if ord_(data[2 + exifbase]) == 0xFF and data[6 + exifbase:10 + exifbase] == b'Exif':
             # detected EXIF header
             offset = f.tell()
             endian = f.read(1)
